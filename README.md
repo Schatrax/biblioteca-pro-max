@@ -87,7 +87,7 @@ Inclui fluxos reais de uso: cadastro/login, CRUD de livros, favoritos, emprésti
 ## 🚀 Como Executar Localmente
 
 ```bash
-git clone https://github.com/brunonf15/crud-livros-expandido.git
+git clone https://github.com/brunonf15/biblioteca-pro-max.git
 cd crud-livros-expandido
 npm install
 npm start
