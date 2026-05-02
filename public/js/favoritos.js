@@ -12,7 +12,7 @@ function logout() {
 
 async function carregarFavoritos() {
   try {
-    const response = await fetch(`http://localhost:3000/favoritos/${usuario.id}`);
+    const response = await fetch(`/favoritos/${usuario.id}`);
     const favoritos = await response.json();
     
     const container = document.getElementById('lista-favoritos');

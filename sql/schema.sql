@@ -1,0 +1,55 @@
+-- Schema idempotente da Biblioteca Pro Max
+-- Pode ser executado múltiplas vezes sem efeitos colaterais.
+
+CREATE TABLE IF NOT EXISTS usuarios (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(150) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  senha VARCHAR(255) NOT NULL,
+  tipo TINYINT NOT NULL DEFAULT 1,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS livros (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(255) NOT NULL,
+  autor VARCHAR(255) NOT NULL,
+  paginas INT NOT NULL,
+  descricao TEXT,
+  imagem_url VARCHAR(500),
+  data_cadastro DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  estoque INT NOT NULL DEFAULT 0,
+  preco DECIMAL(10, 2) NOT NULL DEFAULT 0.00
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS favoritos (
+  usuario_id INT NOT NULL,
+  livro_id INT NOT NULL,
+  PRIMARY KEY (usuario_id, livro_id),
+  CONSTRAINT fk_favoritos_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  CONSTRAINT fk_favoritos_livro FOREIGN KEY (livro_id) REFERENCES livros(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS arrendamentos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  livro_id INT NOT NULL,
+  data_inicio VARCHAR(50) NOT NULL,
+  data_fim VARCHAR(50) NOT NULL,
+  status ENUM('PENDENTE', 'APROVADO', 'REJEITADO') NOT NULL DEFAULT 'PENDENTE',
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_arrendamentos_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  CONSTRAINT fk_arrendamentos_livro FOREIGN KEY (livro_id) REFERENCES livros(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS compras (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  livro_id INT NOT NULL,
+  quantidade INT NOT NULL,
+  total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  status ENUM('PENDENTE', 'APROVADA', 'CANCELADA') NOT NULL DEFAULT 'PENDENTE',
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_compras_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  CONSTRAINT fk_compras_livro FOREIGN KEY (livro_id) REFERENCES livros(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

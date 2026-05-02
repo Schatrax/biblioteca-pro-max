@@ -1,7 +1,5 @@
 // js/minhas-compras.js
 
-const API_BASE = 'http://localhost:3000';
-
 function obterUsuarioLogado() {
   const usuarioStr = localStorage.getItem('usuario');
   if (!usuarioStr) {
@@ -41,7 +39,7 @@ async function carregarMinhasCompras() {
   const msgVazio = document.getElementById('mensagem-vazio');
 
   try {
-    const resp = await fetch(`${API_BASE}/compras/me?usuarioId=${usuario.id}`);
+    const resp = await fetch(`/compras/me?usuarioId=${usuario.id}`);
     const data = await resp.json();
 
     lista.innerHTML = '';

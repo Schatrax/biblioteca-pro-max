@@ -1,15 +1,59 @@
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
+const pool = require('./db');
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT, 10) || 3000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
+
+// Cache-Control: força navegadores a buscar HTML/JS atualizados a cada deploy
+app.use((req, res, next) => {
+  if (req.url.endsWith('.html') || req.url.endsWith('.js') || req.url === '/') {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+  next();
+});
+
 app.use(express.static('public'));
+
+const LIVRO_SELECT = `
+  id,
+  nome,
+  autor,
+  paginas,
+  descricao,
+  imagem_url   AS imagemUrl,
+  data_cadastro AS dataCadastro,
+  estoque,
+  preco
+`;
+
+const ARRENDAMENTO_SELECT = `
+  id,
+  usuario_id   AS usuarioId,
+  livro_id     AS livroId,
+  data_inicio  AS dataInicio,
+  data_fim     AS dataFim,
+  status,
+  criado_em    AS criadoEm
+`;
+
+const COMPRA_SELECT = `
+  id,
+  usuario_id AS usuarioId,
+  livro_id   AS livroId,
+  quantidade,
+  total,
+  status,
+  criado_em  AS criadoEm
+`;
+
+const USUARIO_SELECT = `id, nome, email, tipo`;
 
 /**
  * @swagger
@@ -18,270 +62,152 @@ app.use(express.static('public'));
  *     Usuario:
  *       type: object
  *       properties:
- *         id:
- *           type: integer
- *         nome:
- *           type: string
- *         email:
- *           type: string
+ *         id: { type: integer }
+ *         nome: { type: string }
+ *         email: { type: string }
  *         tipo:
  *           type: integer
  *           description: 1 = Aluno, 2 = Funcionário, 3 = Admin
  *     NovoUsuario:
  *       type: object
- *       required:
- *         - nome
- *         - email
- *         - senha
+ *       required: [nome, email, senha]
  *       properties:
- *         nome:
- *           type: string
- *         email:
- *           type: string
- *         senha:
- *           type: string
+ *         nome: { type: string }
+ *         email: { type: string }
+ *         senha: { type: string }
  *         tipo:
  *           type: integer
  *           description: Opcional. Se não informado, assume 1 (Aluno)
  *     LoginRequest:
  *       type: object
- *       required:
- *         - email
- *         - senha
+ *       required: [email, senha]
  *       properties:
- *         email:
- *           type: string
- *         senha:
- *           type: string
+ *         email: { type: string }
+ *         senha: { type: string }
  *     Livro:
  *       type: object
  *       properties:
- *         id:
- *           type: integer
- *         nome:
- *           type: string
- *         autor:
- *           type: string
- *         paginas:
- *           type: integer
- *         descricao:
- *           type: string
- *         imagemUrl:
- *           type: string
- *         dataCadastro:
- *           type: string
- *           format: date-time
- *         estoque:
- *           type: integer
- *         preco:
- *           type: number
- *           format: float
+ *         id: { type: integer }
+ *         nome: { type: string }
+ *         autor: { type: string }
+ *         paginas: { type: integer }
+ *         descricao: { type: string }
+ *         imagemUrl: { type: string }
+ *         dataCadastro: { type: string, format: date-time }
+ *         estoque: { type: integer }
+ *         preco: { type: number, format: float }
  *     NovoLivro:
  *       type: object
- *       required:
- *         - nome
- *         - autor
- *         - paginas
+ *       required: [nome, autor, paginas]
  *       properties:
- *         nome:
- *           type: string
- *         autor:
- *           type: string
- *         paginas:
- *           type: integer
- *         descricao:
- *           type: string
- *         imagemUrl:
- *           type: string
- *         estoque:
- *           type: integer
- *         preco:
- *           type: number
- *           format: float
+ *         nome: { type: string }
+ *         autor: { type: string }
+ *         paginas: { type: integer }
+ *         descricao: { type: string }
+ *         imagemUrl: { type: string }
+ *         estoque: { type: integer }
+ *         preco: { type: number, format: float }
  *     FavoritoRequest:
  *       type: object
- *       required:
- *         - usuarioId
- *         - livroId
+ *       required: [usuarioId, livroId]
  *       properties:
- *         usuarioId:
- *           type: integer
- *         livroId:
- *           type: integer
+ *         usuarioId: { type: integer }
+ *         livroId: { type: integer }
  *     Arrendamento:
  *       type: object
  *       properties:
- *         id:
- *           type: integer
- *         usuarioId:
- *           type: integer
- *         livroId:
- *           type: integer
- *         dataInicio:
- *           type: string
- *         dataFim:
- *           type: string
- *         status:
- *           type: string
- *           enum: [PENDENTE, APROVADO, REJEITADO]
- *         criadoEm:
- *           type: string
- *           format: date-time
+ *         id: { type: integer }
+ *         usuarioId: { type: integer }
+ *         livroId: { type: integer }
+ *         dataInicio: { type: string }
+ *         dataFim: { type: string }
+ *         status: { type: string, enum: [PENDENTE, APROVADO, REJEITADO] }
+ *         criadoEm: { type: string, format: date-time }
  *     NovoArrendamento:
  *       type: object
- *       required:
- *         - usuarioId
- *         - livroId
- *         - dataInicio
- *         - dataFim
+ *       required: [usuarioId, livroId, dataInicio, dataFim]
  *       properties:
- *         usuarioId:
- *           type: integer
- *         livroId:
- *           type: integer
- *         dataInicio:
- *           type: string
- *         dataFim:
- *           type: string
+ *         usuarioId: { type: integer }
+ *         livroId: { type: integer }
+ *         dataInicio: { type: string }
+ *         dataFim: { type: string }
  *     AtualizaStatusArrendamento:
  *       type: object
- *       required:
- *         - status
+ *       required: [status]
  *       properties:
- *         status:
- *           type: string
- *           enum: [APROVADO, REJEITADO]
+ *         status: { type: string, enum: [APROVADO, REJEITADO] }
  *     Compra:
  *       type: object
  *       properties:
- *         id:
- *           type: integer
- *         usuarioId:
- *           type: integer
- *         livroId:
- *           type: integer
- *         quantidade:
- *           type: integer
- *         total:
- *           type: number
- *         status:
- *           type: string
- *           enum: [PENDENTE, APROVADA, CANCELADA]
- *         criadoEm:
- *           type: string
- *           format: date-time
+ *         id: { type: integer }
+ *         usuarioId: { type: integer }
+ *         livroId: { type: integer }
+ *         quantidade: { type: integer }
+ *         total: { type: number }
+ *         status: { type: string, enum: [PENDENTE, APROVADA, CANCELADA] }
+ *         criadoEm: { type: string, format: date-time }
  *     NovaCompra:
  *       type: object
- *       required:
- *         - usuarioId
- *         - livroId
- *         - quantidade
+ *       required: [usuarioId, livroId, quantidade]
  *       properties:
- *         usuarioId:
- *           type: integer
- *         livroId:
- *           type: integer
- *         quantidade:
- *           type: integer
+ *         usuarioId: { type: integer }
+ *         livroId: { type: integer }
+ *         quantidade: { type: integer }
  *     AtualizaStatusCompra:
  *       type: object
- *       required:
- *         - status
+ *       required: [status]
  *       properties:
- *         status:
- *           type: string
- *           enum: [APROVADA, CANCELADA]
+ *         status: { type: string, enum: [APROVADA, CANCELADA] }
  */
 
-// "Banco de dados" em memória
-let usuarios = [
-  { id: 1, nome: 'Admin Master', email: 'admin@biblioteca.com', senha: '123456', tipo: 3 },
-  { id: 2, nome: 'João Funcionário', email: 'func@biblio.com', senha: '123456', tipo: 2 },
-  { id: 3, nome: 'Maria Aluna', email: 'aluna@teste.com', senha: '123456', tipo: 1 }
-];
-
-let livros = [
-  {
-    id: 1, nome: 'Clean Code', autor: 'Robert C. Martin', paginas: 464,
-    descricao: 'Um guia completo sobre boas práticas de programação',
-    imagemUrl: 'https://images-na.ssl-images-amazon.com/images/I/41xShlnTZTL._SX376_BO1,204,203,200_.jpg',
-    dataCadastro: new Date().toISOString(), estoque: 5, preco: 49.90
-  },
-  {
-    id: 2, nome: 'Harry Potter', autor: 'J.K. Rowling', paginas: 309,
-    descricao: 'O primeiro livro da saga do bruxinho mais famoso',
-    imagemUrl: 'https://m.media-amazon.com/images/I/81ibfYk4qmL._SY466_.jpg',
-    dataCadastro: new Date().toISOString(), estoque: 3, preco: 39.90
-  }
-];
-
-let favoritos = [];       // { usuarioId, livroId }
-let arrendamentos = [];   // { id, usuarioId, livroId, dataInicio, dataFim, status, criadoEm }
-let compras = [];         // { id, usuarioId, livroId, quantidade, total, status, criadoEm }
-
-let proximoIdUsuario = 4;
-let proximoIdLivro = 3;
-let proximoIdArrendamento = 1;
-let proximoIdCompra = 1;
-
-// ==================== AUTENTICAÇÃO (SEM TOKEN) ====================
+// ==================== AUTENTICAÇÃO ====================
 
 /**
  * @swagger
  * /registro:
  *   post:
  *     summary: Registra um novo usuário
- *     tags:
- *       - Autenticação
+ *     tags: [Autenticação]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/NovoUsuario'
+ *           schema: { $ref: '#/components/schemas/NovoUsuario' }
  *     responses:
- *       201:
- *         description: Usuário criado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 mensagem:
- *                   type: string
- *                 usuario:
- *                   $ref: '#/components/schemas/Usuario'
- *       400:
- *         description: Email já cadastrado ou dados inválidos
+ *       201: { description: Usuário criado com sucesso }
+ *       400: { description: Email já cadastrado ou dados inválidos }
  */
-app.post('/registro', (req, res) => {
-  const { nome, email, senha, tipo } = req.body;
+app.post('/registro', async (req, res) => {
+  try {
+    const { nome, email, senha, tipo } = req.body;
 
-  const usuarioExistente = usuarios.find(u => u.email === email);
-  if (usuarioExistente) {
-    return res.status(400).json({ mensagem: 'Email já cadastrado' });
+    if (!nome || !email || !senha) {
+      return res.status(400).json({ mensagem: 'Nome, email e senha são obrigatórios' });
+    }
+
+    const [existentes] = await pool.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+    if (existentes.length > 0) {
+      return res.status(400).json({ mensagem: 'Email já cadastrado' });
+    }
+
+    let tipoFinal = 1;
+    if ([1, 2, 3].includes(parseInt(tipo))) tipoFinal = parseInt(tipo);
+
+    const senhaHash = bcrypt.hashSync(senha, 10);
+
+    const [result] = await pool.query(
+      'INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)',
+      [nome, email, senhaHash, tipoFinal]
+    );
+
+    res.status(201).json({
+      mensagem: 'Usuário criado com sucesso',
+      usuario: { id: result.insertId, nome, email, tipo: tipoFinal }
+    });
+  } catch (err) {
+    console.error('Erro /registro:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-
-  let tipoFinal = 1;
-  if ([1, 2, 3].includes(parseInt(tipo))) {
-    tipoFinal = parseInt(tipo);
-  }
-
-  const novoUsuario = {
-    id: proximoIdUsuario++,
-    nome,
-    email,
-    senha,
-    tipo: tipoFinal
-  };
-
-  usuarios.push(novoUsuario);
-
-  const { senha: _, ...usuarioSemSenha } = novoUsuario;
-  res.status(201).json({
-    mensagem: 'Usuário criado com sucesso',
-    usuario: usuarioSemSenha
-  });
 });
 
 /**
@@ -289,64 +215,58 @@ app.post('/registro', (req, res) => {
  * /login:
  *   post:
  *     summary: Realiza login de usuário
- *     tags:
- *       - Autenticação
+ *     tags: [Autenticação]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
+ *           schema: { $ref: '#/components/schemas/LoginRequest' }
  *     responses:
- *       200:
- *         description: Login realizado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 mensagem:
- *                   type: string
- *                 usuario:
- *                   $ref: '#/components/schemas/Usuario'
- *       401:
- *         description: Email ou senha incorretos
+ *       200: { description: Login realizado com sucesso }
+ *       401: { description: Email ou senha incorretos }
  */
-app.post('/login', (req, res) => {
-  const { email, senha } = req.body;
-  const usuario = usuarios.find(u => u.email === email && u.senha === senha);
-  if (!usuario) {
-    return res.status(401).json({ mensagem: 'Email ou senha incorretos' });
+app.post('/login', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    const [rows] = await pool.query(
+      'SELECT id, nome, email, senha, tipo FROM usuarios WHERE email = ?',
+      [email]
+    );
+
+    const usuario = rows[0];
+    if (!usuario || !bcrypt.compareSync(senha || '', usuario.senha)) {
+      return res.status(401).json({ mensagem: 'Email ou senha incorretos' });
+    }
+
+    res.json({
+      mensagem: 'Login realizado com sucesso',
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, tipo: usuario.tipo }
+    });
+  } catch (err) {
+    console.error('Erro /login:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-  const { senha: _, ...usuarioSemSenha } = usuario;
-  res.json({
-    mensagem: 'Login realizado com sucesso',
-    usuario: usuarioSemSenha
-  });
 });
 
-// ==================== USUÁRIOS (ADMIN / CRUD) ====================
+// ==================== USUÁRIOS ====================
 
 /**
  * @swagger
  * /usuarios:
  *   get:
  *     summary: Lista todos os usuários (sem senha)
- *     tags:
- *       - Usuários
+ *     tags: [Usuários]
  *     responses:
- *       200:
- *         description: Lista de usuários
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Usuario'
+ *       200: { description: Lista de usuários }
  */
-app.get('/usuarios', (req, res) => {
-  const usuariosSemSenha = usuarios.map(({ senha, ...u }) => u);
-  res.json(usuariosSemSenha);
+app.get('/usuarios', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`SELECT ${USUARIO_SELECT} FROM usuarios ORDER BY id`);
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /usuarios:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -354,56 +274,39 @@ app.get('/usuarios', (req, res) => {
  * /usuarios/{id}:
  *   put:
  *     summary: Atualiza dados de um usuário
- *     tags:
- *       - Usuários
+ *     tags: [Usuários]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do usuário
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               nome:
- *                 type: string
- *               email:
- *                 type: string
- *               tipo:
- *                 type: integer
  *     responses:
- *       200:
- *         description: Usuário atualizado
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Usuario'
- *       404:
- *         description: Usuário não encontrado
+ *       200: { description: Usuário atualizado }
+ *       404: { description: Usuário não encontrado }
  */
-app.put('/usuarios/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const usuario = usuarios.find(u => u.id === id);
+app.put('/usuarios/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { nome, email, tipo } = req.body;
 
-  if (!usuario) {
-    return res.status(404).json({ mensagem: 'Usuário não encontrado' });
+    const [rows] = await pool.query('SELECT id, nome, email, tipo FROM usuarios WHERE id = ?', [id]);
+    const usuario = rows[0];
+    if (!usuario) return res.status(404).json({ mensagem: 'Usuário não encontrado' });
+
+    const novoNome  = nome  || usuario.nome;
+    const novoEmail = email || usuario.email;
+    const novoTipo  = [1, 2, 3].includes(parseInt(tipo)) ? parseInt(tipo) : usuario.tipo;
+
+    await pool.query(
+      'UPDATE usuarios SET nome = ?, email = ?, tipo = ? WHERE id = ?',
+      [novoNome, novoEmail, novoTipo, id]
+    );
+
+    res.json({ id, nome: novoNome, email: novoEmail, tipo: novoTipo });
+  } catch (err) {
+    console.error('Erro PUT /usuarios:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-
-  const { nome, email, tipo } = req.body;
-
-  if (nome) usuario.nome = nome;
-  if (email) usuario.email = email;
-  if ([1, 2, 3].includes(parseInt(tipo))) {
-    usuario.tipo = parseInt(tipo);
-  }
-
-  const { senha: _, ...usuarioSemSenha } = usuario;
-  res.json(usuarioSemSenha);
 });
 
 /**
@@ -411,37 +314,30 @@ app.put('/usuarios/:id', (req, res) => {
  * /usuarios/{id}:
  *   delete:
  *     summary: Remove um usuário
- *     tags:
- *       - Usuários
+ *     tags: [Usuários]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do usuário
  *     responses:
- *       200:
- *         description: Usuário deletado com sucesso
- *       403:
- *         description: Tentativa de excluir o admin principal
- *       404:
- *         description: Usuário não encontrado
+ *       200: { description: Usuário deletado com sucesso }
+ *       403: { description: Tentativa de excluir o admin principal }
+ *       404: { description: Usuário não encontrado }
  */
-app.delete('/usuarios/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
+app.delete('/usuarios/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (id === 1) return res.status(403).json({ mensagem: 'Admin principal não pode ser deletado' });
 
-  if (id === 1) {
-    return res.status(403).json({ mensagem: 'Admin principal não pode ser deletado' });
+    const [result] = await pool.query('DELETE FROM usuarios WHERE id = ?', [id]);
+    if (result.affectedRows === 0) return res.status(404).json({ mensagem: 'Usuário não encontrado' });
+
+    res.json({ mensagem: 'Usuário deletado com sucesso' });
+  } catch (err) {
+    console.error('Erro DELETE /usuarios:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-
-  const index = usuarios.findIndex(u => u.id === id);
-  if (index === -1) {
-    return res.status(404).json({ mensagem: 'Usuário não encontrado' });
-  }
-
-  usuarios.splice(index, 1);
-  res.json({ mensagem: 'Usuário deletado com sucesso' });
 });
 
 // ==================== LIVROS ====================
@@ -451,20 +347,18 @@ app.delete('/usuarios/:id', (req, res) => {
  * /livros:
  *   get:
  *     summary: Lista todos os livros
- *     tags:
- *       - Livros
+ *     tags: [Livros]
  *     responses:
- *       200:
- *         description: Lista de livros
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Livro'
+ *       200: { description: Lista de livros }
  */
-app.get('/livros', (req, res) => {
-  res.json(livros);
+app.get('/livros', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`SELECT ${LIVRO_SELECT} FROM livros ORDER BY id`);
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /livros:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -472,23 +366,42 @@ app.get('/livros', (req, res) => {
  * /livros/disponiveis:
  *   get:
  *     summary: Lista livros com estoque > 0
- *     tags:
- *       - Livros
+ *     tags: [Livros]
  *     responses:
- *       200:
- *         description: Lista de livros disponíveis
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Livro'
+ *       200: { description: Lista de livros disponíveis }
  */
-app.get('/livros/disponiveis', (req, res) => {
-  const disponiveis = livros
-    .filter(l => l.estoque > 0)
-    .map(l => ({ ...l, disponivel: true }));
-  res.json(disponiveis);
+app.get('/livros/disponiveis', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT ${LIVRO_SELECT} FROM livros WHERE estoque > 0 ORDER BY id`
+    );
+    const comFlag = rows.map(l => ({ ...l, disponivel: true }));
+    res.json(comFlag);
+  } catch (err) {
+    console.error('Erro GET /livros/disponiveis:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
+});
+
+/**
+ * @swagger
+ * /livros/recentes/ultimos:
+ *   get:
+ *     summary: Lista os últimos 5 livros cadastrados
+ *     tags: [Livros]
+ *     responses:
+ *       200: { description: Lista de livros recentes }
+ */
+app.get('/livros/recentes/ultimos', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT ${LIVRO_SELECT} FROM livros ORDER BY data_cadastro DESC LIMIT 5`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /livros/recentes/ultimos:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -496,29 +409,28 @@ app.get('/livros/disponiveis', (req, res) => {
  * /livros/{id}:
  *   get:
  *     summary: Busca um livro por ID
- *     tags:
- *       - Livros
+ *     tags: [Livros]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do livro
  *     responses:
- *       200:
- *         description: Livro encontrado
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Livro'
- *       404:
- *         description: Livro não encontrado
+ *       200: { description: Livro encontrado }
+ *       404: { description: Livro não encontrado }
  */
-app.get('/livros/:id', (req, res) => {
-  const livro = livros.find(l => l.id === parseInt(req.params.id));
-  if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
-  res.json(livro);
+app.get('/livros/:id', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT ${LIVRO_SELECT} FROM livros WHERE id = ?`,
+      [parseInt(req.params.id, 10)]
+    );
+    if (rows.length === 0) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Erro GET /livros/:id:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -526,42 +438,41 @@ app.get('/livros/:id', (req, res) => {
  * /livros:
  *   post:
  *     summary: Cria um novo livro
- *     tags:
- *       - Livros
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/NovoLivro'
+ *     tags: [Livros]
  *     responses:
- *       201:
- *         description: Livro criado
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Livro'
- *       400:
- *         description: Campos obrigatórios não informados
+ *       201: { description: Livro criado }
+ *       400: { description: Campos obrigatórios não informados }
  */
-app.post('/livros', (req, res) => {
-  const { nome, autor, paginas, descricao, imagemUrl, estoque = 1, preco = 0 } = req.body;
-  if (!nome || !autor || !paginas) {
-    return res.status(400).json({ mensagem: 'Nome, autor e páginas são obrigatórios' });
+app.post('/livros', async (req, res) => {
+  try {
+    const { nome, autor, paginas, descricao, imagemUrl, estoque = 1, preco = 0 } = req.body;
+    if (!nome || !autor || !paginas) {
+      return res.status(400).json({ mensagem: 'Nome, autor e páginas são obrigatórios' });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO livros (nome, autor, paginas, descricao, imagem_url, estoque, preco)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nome,
+        autor,
+        parseInt(paginas, 10),
+        descricao || '',
+        imagemUrl || 'https://via.placeholder.com/150',
+        parseInt(estoque, 10),
+        parseFloat(preco)
+      ]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT ${LIVRO_SELECT} FROM livros WHERE id = ?`,
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Erro POST /livros:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-  const novoLivro = {
-    id: proximoIdLivro++,
-    nome,
-    autor,
-    paginas: parseInt(paginas),
-    descricao: descricao || '',
-    imagemUrl: imagemUrl || 'https://via.placeholder.com/150',
-    dataCadastro: new Date().toISOString(),
-    estoque: parseInt(estoque),
-    preco: parseFloat(preco)
-  };
-  livros.push(novoLivro);
-  res.status(201).json(novoLivro);
 });
 
 /**
@@ -569,41 +480,49 @@ app.post('/livros', (req, res) => {
  * /livros/{id}:
  *   put:
  *     summary: Atualiza dados de um livro
- *     tags:
- *       - Livros
+ *     tags: [Livros]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do livro
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/NovoLivro'
  *     responses:
- *       200:
- *         description: Livro atualizado
- *       404:
- *         description: Livro não encontrado
+ *       200: { description: Livro atualizado }
+ *       404: { description: Livro não encontrado }
  */
-app.put('/livros/:id', (req, res) => {
-  const livro = livros.find(l => l.id === parseInt(req.params.id));
-  if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+app.put('/livros/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
 
-  const { nome, autor, paginas, descricao, imagemUrl, estoque, preco } = req.body;
-  if (nome) livro.nome = nome;
-  if (autor) livro.autor = autor;
-  if (paginas) livro.paginas = parseInt(paginas);
-  if (descricao !== undefined) livro.descricao = descricao;
-  if (imagemUrl) livro.imagemUrl = imagemUrl;
-  if (estoque !== undefined) livro.estoque = Math.max(0, parseInt(estoque));
-  if (preco !== undefined) livro.preco = parseFloat(preco);
+    const [rows] = await pool.query(`SELECT ${LIVRO_SELECT} FROM livros WHERE id = ?`, [id]);
+    const livro = rows[0];
+    if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
 
-  res.json(livro);
+    const { nome, autor, paginas, descricao, imagemUrl, estoque, preco } = req.body;
+
+    const novo = {
+      nome:       nome       !== undefined ? nome        : livro.nome,
+      autor:      autor      !== undefined ? autor       : livro.autor,
+      paginas:    paginas    !== undefined ? parseInt(paginas, 10) : livro.paginas,
+      descricao:  descricao  !== undefined ? descricao   : livro.descricao,
+      imagemUrl:  imagemUrl  !== undefined ? imagemUrl   : livro.imagemUrl,
+      estoque:    estoque    !== undefined ? Math.max(0, parseInt(estoque, 10)) : livro.estoque,
+      preco:      preco      !== undefined ? parseFloat(preco) : livro.preco
+    };
+
+    await pool.query(
+      `UPDATE livros
+         SET nome = ?, autor = ?, paginas = ?, descricao = ?, imagem_url = ?, estoque = ?, preco = ?
+       WHERE id = ?`,
+      [novo.nome, novo.autor, novo.paginas, novo.descricao, novo.imagemUrl, novo.estoque, novo.preco, id]
+    );
+
+    const [atualizado] = await pool.query(`SELECT ${LIVRO_SELECT} FROM livros WHERE id = ?`, [id]);
+    res.json(atualizado[0]);
+  } catch (err) {
+    console.error('Erro PUT /livros:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -611,26 +530,25 @@ app.put('/livros/:id', (req, res) => {
  * /livros/{id}:
  *   delete:
  *     summary: Remove um livro
- *     tags:
- *       - Livros
+ *     tags: [Livros]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do livro
  *     responses:
- *       200:
- *         description: Livro removido
- *       404:
- *         description: Livro não encontrado
+ *       200: { description: Livro removido }
+ *       404: { description: Livro não encontrado }
  */
-app.delete('/livros/:id', (req, res) => {
-  const index = livros.findIndex(l => l.id === parseInt(req.params.id));
-  if (index === -1) return res.status(404).json({ mensagem: 'Livro não encontrado' });
-  livros.splice(index, 1);
-  res.json({ mensagem: 'Livro removido' });
+app.delete('/livros/:id', async (req, res) => {
+  try {
+    const [result] = await pool.query('DELETE FROM livros WHERE id = ?', [parseInt(req.params.id, 10)]);
+    if (result.affectedRows === 0) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+    res.json({ mensagem: 'Livro removido' });
+  } catch (err) {
+    console.error('Erro DELETE /livros:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 // ==================== ESTATÍSTICAS ====================
@@ -640,34 +558,47 @@ app.delete('/livros/:id', (req, res) => {
  * /estatisticas:
  *   get:
  *     summary: Retorna estatísticas gerais da biblioteca
- *     tags:
- *       - Estatísticas
+ *     tags: [Estatísticas]
  *     responses:
- *       200:
- *         description: Estatísticas retornadas com sucesso
+ *       200: { description: Estatísticas retornadas com sucesso }
  */
-app.get('/estatisticas', (req, res) => {
-  const totalLivros = livros.length;
-  const totalPaginas = livros.reduce((acc, l) => acc + l.paginas, 0);
-  const totalUsuarios = usuarios.length;
-  const usuariosPorTipo = {
-    alunos: usuarios.filter(u => u.tipo === 1).length,
-    funcionarios: usuarios.filter(u => u.tipo === 2).length,
-    admins: usuarios.filter(u => u.tipo === 3).length
-  };
-  const livrosDisponiveis = livros.filter(l => l.estoque > 0).length;
-  const arrendamentosPendentes = arrendamentos.filter(a => a.status === 'PENDENTE').length;
-  const comprasPendentes = compras.filter(c => c.status === 'PENDENTE').length;
+app.get('/estatisticas', async (req, res) => {
+  try {
+    const [[livrosStat]] = await pool.query(
+      'SELECT COUNT(*) AS totalLivros, COALESCE(SUM(paginas), 0) AS totalPaginas, SUM(CASE WHEN estoque > 0 THEN 1 ELSE 0 END) AS livrosDisponiveis FROM livros'
+    );
+    const [[usuariosStat]] = await pool.query(
+      `SELECT
+         COUNT(*) AS totalUsuarios,
+         SUM(CASE WHEN tipo = 1 THEN 1 ELSE 0 END) AS alunos,
+         SUM(CASE WHEN tipo = 2 THEN 1 ELSE 0 END) AS funcionarios,
+         SUM(CASE WHEN tipo = 3 THEN 1 ELSE 0 END) AS admins
+       FROM usuarios`
+    );
+    const [[arrPend]] = await pool.query(
+      "SELECT COUNT(*) AS arrendamentosPendentes FROM arrendamentos WHERE status = 'PENDENTE'"
+    );
+    const [[comPend]] = await pool.query(
+      "SELECT COUNT(*) AS comprasPendentes FROM compras WHERE status = 'PENDENTE'"
+    );
 
-  res.json({
-    totalLivros,
-    totalPaginas,
-    totalUsuarios,
-    usuariosPorTipo,
-    livrosDisponiveis,
-    arrendamentosPendentes,
-    comprasPendentes
-  });
+    res.json({
+      totalLivros: Number(livrosStat.totalLivros) || 0,
+      totalPaginas: Number(livrosStat.totalPaginas) || 0,
+      totalUsuarios: Number(usuariosStat.totalUsuarios) || 0,
+      usuariosPorTipo: {
+        alunos: Number(usuariosStat.alunos) || 0,
+        funcionarios: Number(usuariosStat.funcionarios) || 0,
+        admins: Number(usuariosStat.admins) || 0
+      },
+      livrosDisponiveis: Number(livrosStat.livrosDisponiveis) || 0,
+      arrendamentosPendentes: Number(arrPend.arrendamentosPendentes) || 0,
+      comprasPendentes: Number(comPend.comprasPendentes) || 0
+    });
+  } catch (err) {
+    console.error('Erro GET /estatisticas:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 // ==================== FAVORITOS ====================
@@ -677,26 +608,33 @@ app.get('/estatisticas', (req, res) => {
  * /favoritos/{usuarioId}:
  *   get:
  *     summary: Lista livros favoritos de um usuário
- *     tags:
- *       - Favoritos
+ *     tags: [Favoritos]
  *     parameters:
  *       - in: path
  *         name: usuarioId
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do usuário
  *     responses:
- *       200:
- *         description: Lista de livros favoritos
+ *       200: { description: Lista de livros favoritos }
  */
-app.get('/favoritos/:usuarioId', (req, res) => {
-  const usuarioId = parseInt(req.params.usuarioId);
-  const favoritosUsuario = favoritos
-    .filter(f => f.usuarioId === usuarioId)
-    .map(f => livros.find(l => l.id === f.livroId))
-    .filter(Boolean);
-  res.json(favoritosUsuario);
+app.get('/favoritos/:usuarioId', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.params.usuarioId, 10);
+    const [rows] = await pool.query(
+      `SELECT l.id, l.nome, l.autor, l.paginas, l.descricao,
+              l.imagem_url AS imagemUrl, l.data_cadastro AS dataCadastro,
+              l.estoque, l.preco
+         FROM favoritos f
+         JOIN livros l ON l.id = f.livro_id
+        WHERE f.usuario_id = ?
+        ORDER BY l.id`,
+      [usuarioId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /favoritos:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -704,26 +642,31 @@ app.get('/favoritos/:usuarioId', (req, res) => {
  * /favoritos:
  *   post:
  *     summary: Adiciona um livro aos favoritos
- *     tags:
- *       - Favoritos
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/FavoritoRequest'
+ *     tags: [Favoritos]
  *     responses:
- *       201:
- *         description: Livro adicionado aos favoritos
- *       400:
- *         description: Já está nos favoritos
+ *       201: { description: Livro adicionado aos favoritos }
+ *       400: { description: Já está nos favoritos }
  */
-app.post('/favoritos', (req, res) => {
-  const { usuarioId, livroId } = req.body;
-  const jaFavoritado = favoritos.find(f => f.usuarioId === usuarioId && f.livroId === livroId);
-  if (jaFavoritado) return res.status(400).json({ mensagem: 'Já está nos favoritos' });
-  favoritos.push({ usuarioId, livroId });
-  res.status(201).json({ mensagem: 'Livro adicionado aos favoritos' });
+app.post('/favoritos', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.body.usuarioId, 10);
+    const livroId = parseInt(req.body.livroId, 10);
+
+    const [existentes] = await pool.query(
+      'SELECT 1 FROM favoritos WHERE usuario_id = ? AND livro_id = ?',
+      [usuarioId, livroId]
+    );
+    if (existentes.length > 0) return res.status(400).json({ mensagem: 'Já está nos favoritos' });
+
+    await pool.query(
+      'INSERT INTO favoritos (usuario_id, livro_id) VALUES (?, ?)',
+      [usuarioId, livroId]
+    );
+    res.status(201).json({ mensagem: 'Livro adicionado aos favoritos' });
+  } catch (err) {
+    console.error('Erro POST /favoritos:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -731,26 +674,25 @@ app.post('/favoritos', (req, res) => {
  * /favoritos:
  *   delete:
  *     summary: Remove um livro dos favoritos
- *     tags:
- *       - Favoritos
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/FavoritoRequest'
+ *     tags: [Favoritos]
  *     responses:
- *       200:
- *         description: Livro removido dos favoritos
- *       404:
- *         description: Favorito não encontrado
+ *       200: { description: Livro removido dos favoritos }
+ *       404: { description: Favorito não encontrado }
  */
-app.delete('/favoritos', (req, res) => {
-  const { usuarioId, livroId } = req.body;
-  const index = favoritos.findIndex(f => f.usuarioId === usuarioId && f.livroId === livroId);
-  if (index === -1) return res.status(404).json({ mensagem: 'Favorito não encontrado' });
-  favoritos.splice(index, 1);
-  res.json({ mensagem: 'Livro removido dos favoritos' });
+app.delete('/favoritos', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.body.usuarioId, 10);
+    const livroId = parseInt(req.body.livroId, 10);
+    const [result] = await pool.query(
+      'DELETE FROM favoritos WHERE usuario_id = ? AND livro_id = ?',
+      [usuarioId, livroId]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ mensagem: 'Favorito não encontrado' });
+    res.json({ mensagem: 'Livro removido dos favoritos' });
+  } catch (err) {
+    console.error('Erro DELETE /favoritos:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 // ==================== ARRENDAMENTOS ====================
@@ -760,14 +702,20 @@ app.delete('/favoritos', (req, res) => {
  * /arrendamentos:
  *   get:
  *     summary: Lista todos os arrendamentos
- *     tags:
- *       - Arrendamentos
+ *     tags: [Arrendamentos]
  *     responses:
- *       200:
- *         description: Lista de arrendamentos
+ *       200: { description: Lista de arrendamentos }
  */
-app.get('/arrendamentos', (req, res) => {
-  res.json(arrendamentos);
+app.get('/arrendamentos', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT ${ARRENDAMENTO_SELECT} FROM arrendamentos ORDER BY id`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /arrendamentos:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -775,26 +723,30 @@ app.get('/arrendamentos', (req, res) => {
  * /arrendamentos/me:
  *   get:
  *     summary: Lista arrendamentos de um usuário
- *     tags:
- *       - Arrendamentos
+ *     tags: [Arrendamentos]
  *     parameters:
  *       - in: query
  *         name: usuarioId
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do usuário
  *     responses:
- *       200:
- *         description: Lista de arrendamentos do usuário
- *       400:
- *         description: usuarioId não informado
+ *       200: { description: Lista de arrendamentos do usuário }
+ *       400: { description: usuarioId não informado }
  */
-app.get('/arrendamentos/me', (req, res) => {
-  const usuarioId = parseInt(req.query.usuarioId);
-  if (!usuarioId) return res.status(400).json({ mensagem: 'usuarioId é obrigatório na query' });
-  const meus = arrendamentos.filter(a => a.usuarioId === usuarioId);
-  res.json(meus);
+app.get('/arrendamentos/me', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.query.usuarioId, 10);
+    if (!usuarioId) return res.status(400).json({ mensagem: 'usuarioId é obrigatório na query' });
+
+    const [rows] = await pool.query(
+      `SELECT ${ARRENDAMENTO_SELECT} FROM arrendamentos WHERE usuario_id = ? ORDER BY id`,
+      [usuarioId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /arrendamentos/me:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -802,137 +754,141 @@ app.get('/arrendamentos/me', (req, res) => {
  * /arrendamentos:
  *   post:
  *     summary: Cria um novo arrendamento
- *     tags:
- *       - Arrendamentos
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/NovoArrendamento'
+ *     tags: [Arrendamentos]
  *     responses:
- *       201:
- *         description: Arrendamento criado
- *       400:
- *         description: Livro sem estoque
- *       404:
- *         description: Livro não encontrado
+ *       201: { description: Arrendamento criado }
+ *       400: { description: Livro sem estoque }
+ *       404: { description: Livro não encontrado }
  */
-app.post('/arrendamentos', (req, res) => {
-  const { usuarioId, livroId, dataInicio, dataFim } = req.body;
+app.post('/arrendamentos', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.body.usuarioId, 10);
+    const livroId = parseInt(req.body.livroId, 10);
+    const { dataInicio, dataFim } = req.body;
 
-  const livro = livros.find(l => l.id === parseInt(livroId));
-  if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
-  if (livro.estoque <= 0) return res.status(400).json({ mensagem: 'Livro sem estoque para arrendamento' });
+    const [livros] = await pool.query('SELECT id, estoque FROM livros WHERE id = ?', [livroId]);
+    const livro = livros[0];
+    if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+    if (livro.estoque <= 0) return res.status(400).json({ mensagem: 'Livro sem estoque para arrendamento' });
 
-  const novoArrendamento = {
-    id: proximoIdArrendamento++,
-    usuarioId: parseInt(usuarioId),
-    livroId: livro.id,
-    dataInicio,
-    dataFim,
-    status: 'PENDENTE',
-    criadoEm: new Date().toISOString()
-  };
+    const [result] = await pool.query(
+      `INSERT INTO arrendamentos (usuario_id, livro_id, data_inicio, data_fim, status)
+       VALUES (?, ?, ?, ?, 'PENDENTE')`,
+      [usuarioId, livroId, dataInicio, dataFim]
+    );
 
-  arrendamentos.push(novoArrendamento);
-  res.status(201).json(novoArrendamento);
-}
+    const [rows] = await pool.query(
+      `SELECT ${ARRENDAMENTO_SELECT} FROM arrendamentos WHERE id = ?`,
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Erro POST /arrendamentos:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
+});
 
 /**
  * @swagger
  * /arrendamentos/{id}/status:
  *   put:
  *     summary: Atualiza o status de um arrendamento
- *     tags:
- *       - Arrendamentos
+ *     tags: [Arrendamentos]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID do arrendamento
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/AtualizaStatusArrendamento'
  *     responses:
- *       200:
- *         description: Arrendamento atualizado
- *       400:
- *         description: Status inválido
- *       404:
- *         description: Arrendamento não encontrado
+ *       200: { description: Arrendamento atualizado }
+ *       400: { description: Status inválido }
+ *       404: { description: Arrendamento não encontrado }
  */
-);
-app.put('/arrendamentos/:id/status', (req, res) => {
-  const id = parseInt(req.params.id);
-  const { status } = req.body;
-
-  const arr = arrendamentos.find(a => a.id === id);
-  if (!arr) return res.status(404).json({ mensagem: 'Arrendamento não encontrado' });
-
-  if (!['APROVADO', 'REJEITADO'].includes(status)) {
-    return res.status(400).json({ mensagem: 'Status inválido' });
-  }
-
-  arr.status = status;
-
-  if (status === 'APROVADO') {
-    const livro = livros.find(l => l.id === arr.livroId);
-    if (livro && livro.estoque > 0) {
-      livro.estoque -= 1;
+app.put('/arrendamentos/:id/status', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { status } = req.body;
+    if (!['APROVADO', 'REJEITADO'].includes(status)) {
+      return res.status(400).json({ mensagem: 'Status inválido' });
     }
-  }
 
-  res.json(arr);
+    const [rows] = await pool.query(
+      `SELECT ${ARRENDAMENTO_SELECT} FROM arrendamentos WHERE id = ?`,
+      [id]
+    );
+    const arr = rows[0];
+    if (!arr) return res.status(404).json({ mensagem: 'Arrendamento não encontrado' });
+
+    await pool.query('UPDATE arrendamentos SET status = ? WHERE id = ?', [status, id]);
+
+    if (status === 'APROVADO') {
+      await pool.query(
+        'UPDATE livros SET estoque = estoque - 1 WHERE id = ? AND estoque > 0',
+        [arr.livroId]
+      );
+    }
+
+    const [atualizado] = await pool.query(
+      `SELECT ${ARRENDAMENTO_SELECT} FROM arrendamentos WHERE id = ?`,
+      [id]
+    );
+    res.json(atualizado[0]);
+  } catch (err) {
+    console.error('Erro PUT /arrendamentos/:id/status:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 // ==================== COMPRAS ====================
 
 /**
  * @swagger
- * /compras/me:
+ * /compras:
  *   get:
- *     summary: Lista compras de um usuário
- *     tags:
- *       - Compras
- *     parameters:
- *       - in: query
- *         name: usuarioId
- *         schema:
- *           type: integer
- *         required: true
- *         description: ID do usuário
+ *     summary: Lista todas as compras
+ *     tags: [Compras]
  *     responses:
- *       200:
- *         description: Lista de compras do usuário
- *       400:
- *         description: usuarioId não informado
+ *       200: { description: Lista de compras }
  */
-app.get('/compras/me', (req, res) => {
-  const usuarioId = parseInt(req.query.usuarioId);
-  if (!usuarioId) return res.status(400).json({ mensagem: 'usuarioId é obrigatório na query' });
-  const minhas = compras.filter(c => c.usuarioId === usuarioId);
-  res.json(minhas);
+app.get('/compras', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`SELECT ${COMPRA_SELECT} FROM compras ORDER BY id`);
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /compras:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
  * @swagger
- * /compras:
+ * /compras/me:
  *   get:
- *     summary: Lista todas as compras
- *     tags:
- *       - Compras
+ *     summary: Lista compras de um usuário
+ *     tags: [Compras]
+ *     parameters:
+ *       - in: query
+ *         name: usuarioId
+ *         schema: { type: integer }
+ *         required: true
  *     responses:
- *       200:
- *         description: Lista de compras
+ *       200: { description: Lista de compras do usuário }
+ *       400: { description: usuarioId não informado }
  */
-app.get('/compras', (req, res) => {
-  res.json(compras);
+app.get('/compras/me', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.query.usuarioId, 10);
+    if (!usuarioId) return res.status(400).json({ mensagem: 'usuarioId é obrigatório na query' });
+
+    const [rows] = await pool.query(
+      `SELECT ${COMPRA_SELECT} FROM compras WHERE usuario_id = ? ORDER BY id`,
+      [usuarioId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro GET /compras/me:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
+  }
 });
 
 /**
@@ -940,51 +896,42 @@ app.get('/compras', (req, res) => {
  * /compras:
  *   post:
  *     summary: Cria uma nova compra
- *     tags:
- *       - Compras
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/NovaCompra'
+ *     tags: [Compras]
  *     responses:
- *       201:
- *         description: Compra criada
- *       400:
- *         description: Quantidade inválida ou estoque insuficiente
- *       404:
- *         description: Livro não encontrado
+ *       201: { description: Compra criada }
+ *       400: { description: Quantidade inválida ou estoque insuficiente }
+ *       404: { description: Livro não encontrado }
  */
-app.post('/compras', (req, res) => {
-  const { usuarioId, livroId, quantidade } = req.body;
+app.post('/compras', async (req, res) => {
+  try {
+    const usuarioId = parseInt(req.body.usuarioId, 10);
+    const livroId = parseInt(req.body.livroId, 10);
+    const qtd = parseInt(req.body.quantidade, 10);
 
-  const livro = livros.find(l => l.id === parseInt(livroId));
-  if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+    if (isNaN(qtd) || qtd <= 0) return res.status(400).json({ mensagem: 'Quantidade inválida' });
 
-  const qtd = parseInt(quantidade);
-  if (isNaN(qtd) || qtd <= 0) {
-    return res.status(400).json({ mensagem: 'Quantidade inválida' });
+    const [livros] = await pool.query('SELECT id, estoque, preco FROM livros WHERE id = ?', [livroId]);
+    const livro = livros[0];
+    if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+    if (livro.estoque < qtd) return res.status(400).json({ mensagem: 'Estoque insuficiente' });
+
+    const total = (Number(livro.preco) || 0) * qtd;
+
+    const [result] = await pool.query(
+      `INSERT INTO compras (usuario_id, livro_id, quantidade, total, status)
+       VALUES (?, ?, ?, ?, 'PENDENTE')`,
+      [usuarioId, livroId, qtd, total]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT ${COMPRA_SELECT} FROM compras WHERE id = ?`,
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Erro POST /compras:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-
-  if (livro.estoque < qtd) {
-    return res.status(400).json({ mensagem: 'Estoque insuficiente' });
-  }
-
-  const total = (livro.preco || 0) * qtd;
-
-  const novaCompra = {
-    id: proximoIdCompra++,
-    usuarioId: parseInt(usuarioId),
-    livroId: livro.id,
-    quantidade: qtd,
-    total,
-    status: 'PENDENTE',
-    criadoEm: new Date().toISOString()
-  };
-
-  compras.push(novaCompra);
-  res.status(201).json(novaCompra);
 });
 
 /**
@@ -992,80 +939,57 @@ app.post('/compras', (req, res) => {
  * /compras/{id}/status:
  *   put:
  *     summary: Atualiza o status de uma compra
- *     tags:
- *       - Compras
+ *     tags: [Compras]
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: integer
+ *         schema: { type: integer }
  *         required: true
- *         description: ID da compra
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/AtualizaStatusCompra'
  *     responses:
- *       200:
- *         description: Compra atualizada
- *       400:
- *         description: Status inválido ou estoque insuficiente para aprovar
- *       404:
- *         description: Compra ou livro não encontrado
+ *       200: { description: Compra atualizada }
+ *       400: { description: Status inválido ou estoque insuficiente para aprovar }
+ *       404: { description: Compra ou livro não encontrado }
  */
-app.put('/compras/:id/status', (req, res) => {
-  const id = parseInt(req.params.id);
-  const { status } = req.body;
+app.put('/compras/:id/status', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { status } = req.body;
 
-  const compra = compras.find(c => c.id === id);
-  if (!compra) return res.status(404).json({ mensagem: 'Compra não encontrada' });
-
-  if (!['APROVADA', 'CANCELADA'].includes(status)) {
-    return res.status(400).json({ mensagem: 'Status inválido' });
-  }
-
-  if (status === 'APROVADA' && compra.status === 'PENDENTE') {
-    const livro = livros.find(l => l.id === compra.livroId);
-    if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
-    if (livro.estoque < compra.quantidade) {
-      return res.status(400).json({ mensagem: 'Estoque insuficiente para aprovar' });
+    if (!['APROVADA', 'CANCELADA'].includes(status)) {
+      return res.status(400).json({ mensagem: 'Status inválido' });
     }
-    livro.estoque -= compra.quantidade;
+
+    const [rows] = await pool.query(`SELECT ${COMPRA_SELECT} FROM compras WHERE id = ?`, [id]);
+    const compra = rows[0];
+    if (!compra) return res.status(404).json({ mensagem: 'Compra não encontrada' });
+
+    if (status === 'APROVADA' && compra.status === 'PENDENTE') {
+      const [livros] = await pool.query('SELECT id, estoque FROM livros WHERE id = ?', [compra.livroId]);
+      const livro = livros[0];
+      if (!livro) return res.status(404).json({ mensagem: 'Livro não encontrado' });
+      if (livro.estoque < compra.quantidade) {
+        return res.status(400).json({ mensagem: 'Estoque insuficiente para aprovar' });
+      }
+      await pool.query('UPDATE livros SET estoque = estoque - ? WHERE id = ?', [compra.quantidade, compra.livroId]);
+    }
+
+    await pool.query('UPDATE compras SET status = ? WHERE id = ?', [status, id]);
+
+    const [atualizado] = await pool.query(`SELECT ${COMPRA_SELECT} FROM compras WHERE id = ?`, [id]);
+    res.json(atualizado[0]);
+  } catch (err) {
+    console.error('Erro PUT /compras/:id/status:', err);
+    res.status(500).json({ mensagem: 'Erro interno' });
   }
-
-  compra.status = status;
-  res.json(compra);
 });
 
-// ==================== LIVROS RECENTES ====================
-
-/**
- * @swagger
- * /livros/recentes/ultimos:
- *   get:
- *     summary: Lista os últimos 5 livros cadastrados
- *     tags:
- *       - Livros
- *     responses:
- *       200:
- *         description: Lista de livros recentes
- */
-app.get('/livros/recentes/ultimos', (req, res) => {
-  const recentes = livros
-    .sort((a, b) => new Date(b.dataCadastro) - new Date(a.dataCadastro))
-    .slice(0, 5);
-  res.json(recentes);
-});
-
-// ==================== SWAGGER BÁSICO ====================
+// ==================== SWAGGER ====================
 
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
-    info: { title: 'API Biblioteca Simples', version: '3.0.0' },
-    servers: [{ url: `http://localhost:${PORT}` }]
+    info: { title: 'API Biblioteca Pro Max', version: '3.0.0' },
+    servers: [{ url: '/' }]
   },
   apis: ['./server.js']
 };

@@ -65,6 +65,9 @@ Inclui fluxos reais de uso: cadastro/login, CRUD de livros, favoritos, emprésti
 ### Backend
 - **Node.js** – Runtime JavaScript.
 - **Express** – Framework web.
+- **MySQL 8** + **mysql2** – Persistência relacional.
+- **bcryptjs** – Hash de senhas.
+- **dotenv** – Carregamento de variáveis de ambiente (`.env.local` / `.env.production`).
 - **CORS** – Liberação de acesso entre origens.
 - **Swagger UI Express** + **Swagger JSDoc** – Documentação interativa da API.
 
@@ -86,14 +89,19 @@ Inclui fluxos reais de uso: cadastro/login, CRUD de livros, favoritos, emprésti
 
 ## 🚀 Como Executar Localmente
 
+Pré-requisito: Docker Desktop rodando.
+
 ```bash
 git clone https://github.com/brunonf15/biblioteca-pro-max.git
-cd crud-livros-expandido
+cd biblioteca-pro-max
+docker compose up -d        # sobe MySQL (3307) + Adminer (8081), aplica schema/seed
 npm install
-npm start
+npm run dev                 # carrega .env.local
 ```
 
 O servidor sobe na porta **3000**.
+
+- Adminer (gerenciador web do MySQL): http://localhost:8081 — Sistema: MySQL, Servidor: `db`, Usuário/Senha/Base: ver `.env.local`.
 
 Acessos principais:
 
