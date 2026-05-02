@@ -31,7 +31,7 @@ async function carregarLivrosCompra() {
         <img src="${livro.imagemUrl}" alt="${livro.nome}">
         <h3>${livro.nome}</h3>
         <p><strong>Autor:</strong> ${livro.autor}</p>
-        <p><strong>Preço:</strong> R$ ${livro.preco?.toFixed(2) || '0,00'}</p>
+        <p><strong>Preço:</strong> € ${livro.preco?.toFixed(2) || '0,00'}</p>
         <p><strong>Estoque:</strong> ${livro.estoque}</p>
         <div class="form-group" style="margin-top:10px;">
           <label for="qtd-${livro.id}">Quantidade:</label>

@@ -38,7 +38,7 @@ async function carregarComprasAdmin() {
         <p><strong>Usuário ID:</strong> ${c.usuarioId}</p>
         <p><strong>Livro ID:</strong> ${c.livroId}</p>
         <p><strong>Quantidade:</strong> ${c.quantidade}</p>
-        <p><strong>Total:</strong> R$ ${c.total.toFixed(2)}</p>
+        <p><strong>Total:</strong> € ${c.total.toFixed(2)}</p>
         <p><strong>Status:</strong> ${c.status}</p>
         <p><strong>Data:</strong> ${new Date(c.criadoEm).toLocaleString('pt-BR')}</p>
         ${

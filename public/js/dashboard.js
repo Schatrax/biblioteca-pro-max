@@ -119,7 +119,7 @@ async function carregarLivrosRecentes() {
         <h3>${livro.nome}</h3>
         <p><strong>Autor:</strong> ${livro.autor}</p>
         <p><strong>Estoque:</strong> ${livro.estoque}</p>
-        <p><strong>R$ ${livro.preco?.toFixed(2) || '0,00'}</strong></p>
+        <p><strong>€ ${livro.preco?.toFixed(2) || '0,00'}</strong></p>
       `;
       container.appendChild(card);
     });
