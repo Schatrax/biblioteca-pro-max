@@ -983,6 +983,60 @@ app.put('/compras/:id/status', async (req, res) => {
   }
 });
 
+// ==================== RESET PERIÓDICO ====================
+// Roda a cada 1h: zera dados de domínio E remove usuários cadastrados pelos clientes,
+// mantendo apenas os 3 usuários iniciais (admin, funcionário, aluno).
+
+const RESET_INTERVAL_MS = 60 * 60 * 1000;
+const SEED_PASSWORD_HASH = '$2a$10$0LBTu0kBOfcz5vqFlk8wTuY1TCHoBWTTmz6sd/bflLB5yObRb566W'; // hash de "123456"
+
+async function resetPeriodico() {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.query('DELETE FROM compras');
+    await conn.query('DELETE FROM arrendamentos');
+    await conn.query('DELETE FROM favoritos');
+    await conn.query('DELETE FROM livros');
+    await conn.query('DELETE FROM usuarios WHERE id NOT IN (1, 2, 3)');
+
+    await conn.query('ALTER TABLE compras AUTO_INCREMENT = 1');
+    await conn.query('ALTER TABLE arrendamentos AUTO_INCREMENT = 1');
+    await conn.query('ALTER TABLE livros AUTO_INCREMENT = 1');
+    await conn.query('ALTER TABLE usuarios AUTO_INCREMENT = 4');
+
+    await conn.query(
+      `INSERT INTO usuarios (id, nome, email, senha, tipo) VALUES
+        (1, 'Admin Master',     'admin@biblioteca.com', ?, 3),
+        (2, 'João Funcionário', 'func@biblio.com',      ?, 2),
+        (3, 'Maria Aluna',      'aluna@teste.com',      ?, 1)
+       ON DUPLICATE KEY UPDATE nome = VALUES(nome), email = VALUES(email), senha = VALUES(senha), tipo = VALUES(tipo)`,
+      [SEED_PASSWORD_HASH, SEED_PASSWORD_HASH, SEED_PASSWORD_HASH]
+    );
+
+    await conn.query(
+      `INSERT INTO livros (id, nome, autor, paginas, descricao, imagem_url, estoque, preco) VALUES
+        (1, 'Clean Code',   'Robert C. Martin', 464, 'Um guia completo sobre boas práticas de programação',
+         'https://images-na.ssl-images-amazon.com/images/I/41xShlnTZTL._SX376_BO1,204,203,200_.jpg', 5, 49.90),
+        (2, 'Harry Potter', 'J.K. Rowling',     309, 'O primeiro livro da saga do bruxinho mais famoso',
+         'https://m.media-amazon.com/images/I/81ibfYk4qmL._SY466_.jpg', 3, 39.90)`
+    );
+
+    await conn.commit();
+    console.log(`[reset] ${new Date().toISOString()} - estado inicial restaurado (3 usuários, 2 livros, 0 domínio)`);
+  } catch (err) {
+    await conn.rollback();
+    console.error('[reset] Erro:', err.message);
+  } finally {
+    conn.release();
+  }
+}
+
+if (require.main === module) {
+  setInterval(resetPeriodico, RESET_INTERVAL_MS);
+}
+
 // ==================== SWAGGER ====================
 
 const swaggerOptions = {
