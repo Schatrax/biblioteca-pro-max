@@ -75,7 +75,7 @@ async function carregarLivros() {
         <p><strong>Autor:</strong> ${livro.autor}</p>
         <p><strong>Páginas:</strong> ${livro.paginas}</p>
         <p><strong>Estoque:</strong> ${livro.estoque ?? '-'}</p>
-        <p><strong>Preço:</strong> R$ ${livro.preco?.toFixed(2) || '0,00'}</p>
+        <p><strong>Preço:</strong> € ${livro.preco?.toFixed(2) || '0,00'}</p>
       `;
       listaLivros.appendChild(card);
     });

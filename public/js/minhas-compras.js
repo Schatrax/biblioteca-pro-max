@@ -68,7 +68,7 @@ async function carregarMinhasCompras() {
       card.appendChild(qtd);
 
       const total = document.createElement('p');
-      total.textContent = `Total: R$ ${Number(compra.total || 0).toFixed(2)}`;
+      total.textContent = `Total: € ${Number(compra.total || 0).toFixed(2)}`;
       card.appendChild(total);
 
       const status = document.createElement('p');
