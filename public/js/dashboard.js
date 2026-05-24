@@ -10,6 +10,25 @@ function logout() {
   window.location.href = 'login.html';
 }
 
+async function fetchComRetry(url, { timeoutMs = 8000, tentativas = 2 } = {}) {
+  let ultimoErro;
+  for (let i = 0; i < tentativas; i++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      ultimoErro = err;
+      if (i < tentativas - 1) await new Promise(res => setTimeout(res, 800));
+    }
+  }
+  throw ultimoErro;
+}
+
 function atualizarBoasVindas() {
   const msgElement = document.getElementById('msg-tipo');
   let mensagem = '';
@@ -31,9 +50,10 @@ function atualizarBoasVindas() {
 }
 
 async function carregarEstatisticas() {
+  const statsContainer = document.getElementById('stats');
+  statsContainer.innerHTML = '<p>Carregando estatísticas…</p>';
   try {
-    const response = await fetch('/estatisticas');
-    const stats = await response.json();
+    const stats = await fetchComRetry('/estatisticas');
 
     let estatisticasHTML = '';
     if (usuario.tipo === 1) {
@@ -96,19 +116,27 @@ async function carregarEstatisticas() {
       `;
     }
 
-    document.getElementById('stats').innerHTML = estatisticasHTML;
+    statsContainer.innerHTML = estatisticasHTML;
   } catch (error) {
     console.error('Erro ao carregar estatísticas:', error);
+    statsContainer.innerHTML = `
+      <p>Não foi possível carregar as estatísticas agora.
+        <button onclick="carregarEstatisticas()">Tentar novamente</button>
+      </p>`;
   }
 }
 
 async function carregarLivrosRecentes() {
+  const container = document.getElementById('livros-recentes');
+  container.innerHTML = '<p>Carregando livros…</p>';
   try {
-    const response = await fetch('/livros/disponiveis');
-    const livros = await response.json();
-
-    const container = document.getElementById('livros-recentes');
+    const livros = await fetchComRetry('/livros/disponiveis');
     container.innerHTML = '';
+
+    if (!livros.length) {
+      container.innerHTML = '<p>Nenhum livro disponível no momento.</p>';
+      return;
+    }
 
     livros.slice(0, 5).forEach(livro => {
       const card = document.createElement('div');
@@ -125,6 +153,10 @@ async function carregarLivrosRecentes() {
     });
   } catch (error) {
     console.error('Erro ao carregar livros:', error);
+    container.innerHTML = `
+      <p>Não foi possível carregar os livros agora.
+        <button onclick="carregarLivrosRecentes()">Tentar novamente</button>
+      </p>`;
   }
 }
 
