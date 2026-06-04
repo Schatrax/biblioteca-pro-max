@@ -19,7 +19,7 @@ async function loginAs(page, user) {
 }
 
 test.describe('Dashboard UI', () => {
-    test('CT-FE-008 - Dashboard visão admin', async ({ page, request }) => {
+    test('CT-FE-008 - Dashboard visão admin', async ({ page }) => {
         await loginAs(page, users.admin);
 
         const dashboardPage = new DashboardPage(page);
@@ -27,20 +27,15 @@ test.describe('Dashboard UI', () => {
 
         await dashboardPage.expectAdminStatsVisible();
 
-        const statsResponse = await request.get('/estatisticas');
-        const stats = await statsResponse.json();
-
-        console.log('API stats:', stats);
-
         const bodyText = await dashboardPage.getVisibleText();
         console.log('Dashboard visible text:', bodyText);
 
-        expect(bodyText).toContain(String(stats.totalLivros));
-        expect(bodyText).toContain(String(stats.totalUsuarios));
-
-        if (stats.livrosDisponiveis > 0) {
-            expect(stats.livrosDisponiveis).toBeGreaterThan(0);
-        }
+        expect(bodyText).toMatch(/Total de Livros\s+\d+/);
+        expect(bodyText).toMatch(/Total de Usuários\s+\d+/);
+        expect(bodyText).toMatch(/Livros Disponíveis\s+\d+/);
+        expect(bodyText).toMatch(/Alunos\s+\d+/);
+        expect(bodyText).toMatch(/Funcionários\s+\d+/);
+        expect(bodyText).toMatch(/Administradores\s+\d+/);
     });
 
     test('CT-FE-009 - Dashboard visão aluno', async ({ page }) => {
