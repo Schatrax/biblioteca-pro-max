@@ -294,11 +294,20 @@ pages/
 fixtures/
 ```
 
+### Framework Design
+
+Os testes UI seguem o padrão Page Object Model (POM), promovendo:
+
+- Reutilização de código
+- Manutenção simplificada
+- Separação entre lógica de teste e locators
+- Maior legibilidade dos testes
+
 ### Cobertura
 
 * API: 32 casos de teste automatizados
-* UI: 24 casos de teste automatizados
-* Total: 56 casos de teste
+* UI: 23 casos de teste automatizados
+* Total: 55 casos de teste
 * Execução final: 162 testes Playwright passed
 
 ### Instalar dependências
