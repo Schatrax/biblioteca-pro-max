@@ -251,3 +251,200 @@ Projeto de código aberto para fins educacionais.
 ***
 
 Se esse projeto ajudar nos seus estudos ou testes, considere dar uma ⭐ no GitHub!
+
+***
+
+## 🧪 Test Automation
+
+Este projeto inclui uma suíte de testes automatizados desenvolvida com **Playwright**, cobrindo testes de **API** e **UI**.
+
+### Stack utilizada
+
+* JavaScript
+* Playwright
+* Node.js
+* Page Object Model
+* GitHub Actions
+* HTML Report do Playwright
+
+### Estrutura dos testes
+
+```text
+tests/
+├── api/
+│   ├── auth.api.spec.js
+│   ├── livros.api.spec.js
+│   ├── estatisticas.api.spec.js
+│   ├── favoritos.api.spec.js
+│   ├── arrendamentos.api.spec.js
+│   ├── compras.api.spec.js
+│   └── usuarios.api.spec.js
+│
+└── ui/
+    ├── auth.ui.spec.js
+    ├── navigation.ui.spec.js
+    ├── dashboard.ui.spec.js
+    ├── livros.ui.spec.js
+    ├── favoritos.ui.spec.js
+    ├── arrendamentos.ui.spec.js
+    ├── compras.ui.spec.js
+    └── admin-usuarios.ui.spec.js
+
+pages/
+fixtures/
+```
+
+### Cobertura
+
+* API: 32 casos de teste automatizados
+* UI: 24 casos de teste automatizados
+* Total: 56 casos de teste
+* Execução final: 162 testes Playwright passed
+
+### Instalar dependências
+
+```bash
+npm install
+npx playwright install
+```
+
+### Executar todos os testes
+
+```bash
+npx playwright test
+```
+
+### Executar apenas testes de API
+
+```bash
+npx playwright test tests/api
+```
+
+### Executar apenas testes de UI
+
+```bash
+npx playwright test tests/ui
+```
+
+### Executar apenas em Chromium
+
+```bash
+npx playwright test --project=chromium
+```
+
+### Executar com browser visível
+
+```bash
+npx playwright test --headed
+```
+
+### Abrir modo interativo do Playwright
+
+```bash
+npx playwright test --ui
+```
+
+### Gerar e abrir relatório HTML
+
+Após executar os testes:
+
+```bash
+npx playwright show-report
+```
+
+O relatório HTML é gerado automaticamente na pasta:
+
+```text
+playwright-report/
+```
+
+O Playwright também gera evidências em caso de falha, como screenshots, vídeos e traces, conforme configurado no `playwright.config.js`.
+
+### Dados de teste
+
+Os testes utilizam dados dinâmicos com `Date.now()` para evitar conflitos entre execuções.
+
+Exemplo:
+
+```javascript
+const email = `user.${Date.now()}@teste.com`;
+```
+
+Também são utilizados utilizadores base definidos em:
+
+```text
+fixtures/users.js
+```
+
+### GitHub Actions
+
+O projeto inclui um workflow em:
+
+```text
+.github/workflows/playwright.yml
+```
+
+Este workflow executa os testes automaticamente no GitHub Actions e publica o relatório do Playwright como artifact.
+
+### Execução via Docker/Jenkins
+
+A execução via Docker/Jenkins é opcional e pode ser configurada criando uma pipeline no Jenkins com os seguintes passos:
+
+1. Fazer checkout do repositório.
+2. Instalar dependências.
+3. Instalar browsers do Playwright.
+4. Executar os testes.
+5. Arquivar o relatório HTML.
+
+Exemplo de pipeline Jenkins:
+
+```groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/Schatrax/biblioteca-pro-max.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                bat 'npm install'
+            }
+        }
+
+        stage('Install Playwright Browsers') {
+            steps {
+                bat 'npx playwright install'
+            }
+        }
+
+        stage('Run Playwright Tests') {
+            steps {
+                bat 'npx playwright test --project=chromium'
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
+        }
+    }
+}
+```
+
+Caso a pipeline seja executada em Linux/Docker, substituir `bat` por `sh`:
+
+```groovy
+sh 'npm install'
+sh 'npx playwright install --with-deps'
+sh 'npx playwright test --project=chromium'
+```
+
+### Nota sobre Jenkins/Docker
+
+A execução local e em GitHub Actions está configurada. A execução em Jenkins/Docker pode ser adicionada como melhoria futura, dependendo da configuração do ambiente Jenkins disponível.
