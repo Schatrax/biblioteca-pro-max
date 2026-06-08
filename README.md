@@ -256,7 +256,7 @@ Se esse projeto ajudar nos seus estudos ou testes, considere dar uma ⭐ no GitH
 
 ## 🧪 Test Automation
 
-Este projeto inclui uma suíte de testes automatizados desenvolvida com **Playwright**, cobrindo testes de **API** e **UI**.
+Esta secção documenta as melhorias adicionadas neste fork: uma suíte de testes automatizados desenvolvida com **Playwright**, cobrindo testes de **API** e **UI**.
 
 ### Stack utilizada
 
