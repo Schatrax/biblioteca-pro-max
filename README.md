@@ -306,7 +306,7 @@ Os testes UI seguem o padrão Page Object Model (POM), promovendo:
 ### Cobertura
 
 * API: 32 casos de teste automatizados
-* UI: 23 casos de teste automatizados
+* UI: 24 casos de teste automatizados
 * Total: 55 casos de teste
 * Execução final: 162 testes Playwright passed
 
