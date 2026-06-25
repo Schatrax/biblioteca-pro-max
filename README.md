@@ -256,7 +256,24 @@ Se esse projeto ajudar nos seus estudos ou testes, considere dar uma ⭐ no GitH
 
 ## 🧪 Test Automation
 
-Esta secção documenta as melhorias adicionadas neste fork: uma suíte de testes automatizados desenvolvida com **Playwright**, cobrindo testes de **API** e **UI**.
+## Contribuição de Automação (Este Fork)
+
+A aplicação Biblioteca Pro Max foi originalmente desenvolvida por Bruno Figueiredo para fins educacionais e de aprendizagem de testes de software.
+
+Toda a framework de automação presente neste fork foi desenvolvida por Nuno Fonseca no âmbito da certificação CRE (Certificação Rumos Expert) – Test Automation Engineer.
+
+O trabalho realizado inclui:
+
+* Desenvolvimento completo da suíte de testes API (32 casos de teste)
+* Desenvolvimento completo da suíte de testes UI (24 casos de teste)
+* Implementação da arquitetura Page Object Model (POM)
+* Criação e gestão de dados dinâmicos para execução dos testes
+* Integração contínua através de GitHub Actions
+* Configuração de relatórios HTML do Playwright
+* Configuração de screenshots, vídeos e traces para análise de falhas
+* Estruturação da framework de automação seguindo boas práticas de manutenção e reutilização de código
+
+Este projeto foi desenvolvido como trabalho final da certificação CRE – Test Automation Engineer, tendo obtido a classificação final de 19,8 valores em 20.
 
 ### Stack utilizada
 
@@ -307,8 +324,8 @@ Os testes UI seguem o padrão Page Object Model (POM), promovendo:
 
 * API: 32 casos de teste automatizados
 * UI: 24 casos de teste automatizados
-* Total: 55 casos de teste
-* Execução final: 162 testes Playwright passed
+* Total: 56 casos de teste
+* Execução final: 168 testes Playwright passados
 
 ### Instalar dependências
 
